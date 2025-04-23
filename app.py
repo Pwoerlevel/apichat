@@ -1,9 +1,10 @@
-import httpx
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
+from g4f.client import Client
 
 app = FastAPI()
+client = Client()
 
 app.add_middleware(
     CORSMiddleware,
@@ -21,45 +22,14 @@ async def chat(request: Request):
     if not messages:
         raise HTTPException(status_code=400, detail="الرجاء إرسال الرسائل في JSON كـ 'messages'.")
 
-    def generate_response():
-        try:
-            # دمج الرسائل في نص واحد لتكوين الـ prompt
-            prompt = " ".join([msg["content"] for msg in messages])
-            # إضافة تعديلات لتوضيح أننا نريد فقط السعرات الحرارية
-            prompt += " كم عدد السعرات الحرارية؟"  # إضافة سؤال خاص بالسعرات الحرارية
-
-            # استدعاء Pollinations API
-            url = f"https://text.pollinations.ai/{prompt}"
-
-            # إرسال طلب GET إلى API
-            async with httpx.AsyncClient() as client:
-                response = await client.get(url)
-
-            # تحقق من نجاح الاستجابة
-            if response.status_code == 200:
-                content = response.text
-
-                # استخراج السعرات الحرارية من النص
-                calories = extract_calories(content)
-
-                if calories:
-                    yield f"{calories} سعرة حرارية"
-                else:
-                    yield "\n[خطأ]: لم يتم العثور على معلومات السعرات الحرارية."
-
-            else:
-                yield f"\n[خطأ]: استجابة غير صالحة من الخادم."
-
-        except Exception as e:
-            yield f"\n[خطأ]: {str(e)}"
-
-    return StreamingResponse(generate_response(), media_type="text/plain")
-
-# دالة لاستخراج السعرات الحرارية من النص
-def extract_calories(content: str):
-    import re
-    # نبحث عن رقم يتبع كلمة "سعرة حرارية" أو ما شابه
-    match = re.search(r'(\d+)\s*سعرة حرارية', content)
-    if match:
-        return match.group(1)
-    return None
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            stream=False,  # هذا يضمن أن الرد لن يكون streaming
+            web_search=False
+        )
+        full_content = response.choices[0].message.content
+        return PlainTextResponse(content=full_content)
+    except Exception as e:
+        return PlainTextResponse(content=f"[خطأ]: {str(e)}", status_code=500)
