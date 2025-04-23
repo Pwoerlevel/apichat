@@ -1,45 +1,40 @@
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from g4f.client import Client
 
-# إعداد FastAPI
 app = FastAPI()
-
-# إنشاء عميل g4f
 client = Client()
 
-# إضافة Middleware للسماح بالـ CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # السماح لجميع الأصول
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # السماح لجميع الأساليب مثل GET, POST
-    allow_headers=["*"],  # السماح بكل الرؤوس
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# المسار الذي يستقبل الطلبات
 @app.post("/chat")
 async def chat(request: Request):
-    # قراءة البيانات المرسلة
     data = await request.json()
     messages = data.get("messages", [])
 
-    # التحقق من وجود الرسائل
     if not messages:
         raise HTTPException(status_code=400, detail="الرجاء إرسال الرسائل في JSON كـ 'messages'.")
 
-    try:
-        # إرسال الرسائل إلى نموذج gpt-4o-mini عبر g4f
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages,
-            stream=False,  # تعطيل التدفق المستمر
-            web_search=False
-        )
-        
-        # إرجاع الرد للمستخدم
-        return {"response": response.choices[0].text}
+    def generate_response():
+        try:
+            stream = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                stream=True,
+                web_search=False
+            )
+            for chunk in stream:
+                content = chunk.choices[0].delta.content
+                if content:
+                    yield content  # هذه هي البيانات التي سيتم إرسالها بشكل مستمر (stream)
+        except Exception as e:
+            yield f"\n[خطأ]: {str(e)}"
 
-    except Exception as e:
-        # في حالة حدوث خطأ، إرجاع رسالة خطأ للمستخدم
-        raise HTTPException(status_code=500, detail=f"حدث خطأ: {str(e)}")
+    return StreamingResponse(generate_response(), media_type="text/plain")
