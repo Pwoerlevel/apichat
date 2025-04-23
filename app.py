@@ -1,10 +1,8 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from g4f.client import Client
 
 app = FastAPI()
-client = Client()
 
 app.add_middleware(
     CORSMiddleware,
@@ -24,16 +22,9 @@ async def chat(request: Request):
 
     def generate_response():
         try:
-            stream = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=messages,
-                stream=True,
-                web_search=False
-            )
-            for chunk in stream:
-                content = chunk.choices[0].delta.content
-                if content:
-                    yield content  # هذه هي البيانات التي سيتم إرسالها بشكل مستمر (stream)
+            # استجابة ثابتة أو منطق خاص بك هنا
+            response = "هذه استجابة ثابتة من الخادم!"
+            yield response  # إرسال الاستجابة بشكل مستمر (stream)
         except Exception as e:
             yield f"\n[خطأ]: {str(e)}"
 
