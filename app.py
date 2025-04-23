@@ -1,44 +1,72 @@
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import StreamingResponse
-from fastapi.middleware.cors import CORSMiddleware
-import httpx
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>واجهة الدردشة</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin-top: 50px;
+        }
+        #response {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            width: 80%;
+            margin: 0 auto;
+            min-height: 100px;
+        }
+        #chatBox {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>مرحبا بك في خدمة الدردشة</h1>
+    
+    <div>
+        <textarea id="userInput" placeholder="اكتب رسالتك هنا..." rows="4" cols="50"></textarea>
+    </div>
+    <div id="chatBox">
+        <button onclick="sendMessage()">إرسال</button>
+    </div>
 
-app = FastAPI()
+    <div id="response"></div>
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    <script>
+        async function sendMessage() {
+            const userInput = document.getElementById('userInput').value;
 
-@app.post("/chat")
-async def chat(request: Request):
-    data = await request.json()
-    messages = data.get("messages", [])
+            if (!userInput) {
+                alert("الرجاء كتابة نص.");
+                return;
+            }
 
-    if not messages:
-        raise HTTPException(status_code=400, detail="الرجاء إرسال الرسائل في JSON كـ 'messages'.")
+            // إرسال الطلب إلى الخادم
+            const responseElement = document.getElementById('response');
+            responseElement.innerHTML = "جاري معالجة الرسالة...";
 
-    # إرسال النص إلى الرابط الخارجي
-    user_text = " ".join(messages)  # دمج الرسائل (إذا كانت متعددة)
-    external_url = f"https://text.pollinations.ai/{user_text}"
+            try {
+                const response = await fetch("https://apichat-bifn8t037-pwoerlevels-projects.vercel.app/chat", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ messages: [userInput] })
+                });
 
-    async with httpx.AsyncClient() as client:
-        try:
-            # إرسال طلب إلى API الخارجي
-            response = await client.get(external_url)
-            response.raise_for_status()  # تحقق من حالة الاستجابة
-
-            def generate_response():
-                try:
-                    # إرجاع الرد من الخادم الخارجي للمستخدم
-                    yield response.text  # إرسال الاستجابة بشكل مستمر (stream)
-                except Exception as e:
-                    yield f"\n[خطأ]: {str(e)}"
-
-            return StreamingResponse(generate_response(), media_type="text/plain")
-
-        except httpx.RequestError as e:
-            raise HTTPException(status_code=500, detail=f"خطأ في الاتصال بـ {external_url}: {str(e)}")
+                if (response.ok) {
+                    const text = await response.text();
+                    responseElement.innerHTML = text;
+                } else {
+                    responseElement.innerHTML = "حدث خطأ أثناء معالجة الرسالة.";
+                }
+            } catch (error) {
+                responseElement.innerHTML = `خطأ في الاتصال بالخادم: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>
