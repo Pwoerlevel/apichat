@@ -28,7 +28,7 @@ async def get_calories(request: Request):
     user_text = " ".join([message["content"] for message in messages])
 
     # إرسال النص إلى الرابط الخارجي (API)
-    external_url = f"https://text.pollinations.ai/{user_text}"
+    external_url = f"https://text.pollinations.ai/رقم فقط الرقم سعرة حرارية فقط رقم فقط رقم بدون اي كلام لي {user_text}"
 
     try:
         async with httpx.AsyncClient() as client:
