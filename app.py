@@ -54,12 +54,3 @@ async def chat(request: Request):
             yield f"\n[خطأ]: {str(e)}"
 
     return StreamingResponse(generate_response(), media_type="text/plain")
-
-# دالة لاستخراج السعرات الحرارية من النص
-def extract_calories(content: str):
-    import re
-    # نبحث عن رقم يتبع كلمة "سعرة حرارية" أو ما شابه
-    match = re.search(r'(\d+)\s*سعرة حرارية', content)
-    if match:
-        return match.group(1)
-    return None
