@@ -1,5 +1,4 @@
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from g4f.client import Client
 
@@ -14,27 +13,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.post("/chat")
-async def chat(request: Request):
+@app.post("/calories")
+async def get_calories(request: Request):
     data = await request.json()
-    messages = data.get("messages", [])
+    food = data.get("food")
 
-    if not messages:
-        raise HTTPException(status_code=400, detail="الرجاء إرسال الرسائل في JSON كـ 'messages'.")
+    if not food:
+        raise HTTPException(status_code=400, detail="يرجى إرسال اسم الأكلة في المفتاح 'food'.")
 
-    def generate_response():
-        try:
-            stream = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=messages,
-                stream=True,
-                web_search=False
-            )
-            for chunk in stream:
-                content = chunk.choices[0].delta.content
-                if content:
-                    yield content  # هذه هي البيانات التي سيتم إرسالها بشكل مستمر (stream)
-        except Exception as e:
-            yield f"\n[خطأ]: {str(e)}"
-
-    return StreamingResponse(generate_response(), media_type="text/plain")
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "أنت خبير تغذية. عندما يتم إعطاؤك اسم أكل، أرجع فقط عدد السعرات الحرارية كرقم بدون أي كلام."},
+                {"role": "user", "content": f"كم عدد السعرات الحرارية في {food}؟"},
+            ],
+            stream=False,
+            web_search=False
+        )
+        content = response.choices[0].message.content.strip()
+        return {"calories": content}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
