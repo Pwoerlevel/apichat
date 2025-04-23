@@ -18,9 +18,9 @@ app.add_middleware(
 SYSTEM_PROMPT = {
     "role": "system",
     "content": (
-        "أنت خبير تغذية محترف. مهمتك الوحيدة هي إعطاء عدد السعرات الحرارية الموجودة في أكلة واحدة فقط "
-        "بصورة رقمية فقط، بدون أي شرح أو كلام إضافي.\n"
-        "إذا لم تكن الرسالة عبارة عن اسم أكلة أو لم تكن مفهومة، لا ترد بأي شيء."
+        "أنت خبير تغذية محترف. مهمتك فقط هي إعطاء عدد السعرات الحرارية لأكلة واحدة فقط، بصيغة رقم فقط (مثل: 350). "
+        "لا تكتب أي كلمة، لا شرح، لا وحدات. فقط الرقم.\n"
+        "إذا لم تكن الرسالة اسم أكلة معروفة، فلا ترد بشيء أبداً."
     )
 }
 
@@ -32,7 +32,6 @@ async def chat(request: Request):
     if not user_messages:
         raise HTTPException(status_code=400, detail="الرجاء إرسال الرسائل في JSON كـ 'messages'.")
 
-    # نضيف توجيه النظام
     messages = [SYSTEM_PROMPT] + user_messages
 
     try:
@@ -44,11 +43,11 @@ async def chat(request: Request):
         )
         full_content = response.choices[0].message.content.strip()
 
-        # نحاول استخراج الرقم فقط
-        match = re.search(r"\d+", full_content)
+        # نحاول استخراج رقم فقط
+        match = re.fullmatch(r"\d+", full_content)
         if match:
             return PlainTextResponse(content=match.group())
         else:
-            return PlainTextResponse(content="")  # لا شيء إذا ما فيه رقم
+            return PlainTextResponse(content="خطأ: الرجاء كتابة اسم أكلة")
     except Exception as e:
-        return PlainTextResponse(content="", status_code=500)
+        return PlainTextResponse(content="خطأ: الرجاء كتابة اسم أكلة")
