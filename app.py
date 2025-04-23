@@ -1,10 +1,11 @@
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from g4f.client import Client
+from pydantic import BaseModel
+import httpx
 
 app = FastAPI()
-client = Client()
 
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -13,25 +14,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+class FoodRequest(BaseModel):
+    food: str
+
 @app.post("/calories")
-async def get_calories(request: Request):
-    data = await request.json()
-    food = data.get("food")
+async def get_calories(data: FoodRequest):
+    prompt = f"كم عدد السعرات الحرارية في {data.food}؟ أجب فقط بالرقم بدون شرح."
 
-    if not food:
-        raise HTTPException(status_code=400, detail="يرجى إرسال اسم الأكلة في المفتاح 'food'.")
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "أنت خبير تغذية. عندما يتم إعطاؤك اسم أكل، أرجع فقط عدد السعرات الحرارية كرقم بدون أي كلام."},
-                {"role": "user", "content": f"كم عدد السعرات الحرارية في {food}؟"},
-            ],
-            stream=False,
-            web_search=False
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "https://api.openrouter.ai/v1/chat/completions",  # مثال على endpoint
+            headers={
+                "Authorization": "Bearer sk-xxx",  # مفتاح API الخاص بك
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "deepseek-reasoning-large",
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ]
+            }
         )
-        content = response.choices[0].message.content.strip()
-        return {"calories": content}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        result = response.json()
+        answer = result['choices'][0]['message']['content']
+        return {"calories": answer.strip()}
