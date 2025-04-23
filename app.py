@@ -1,11 +1,10 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
-from g4f.client import Client
+import requests
 import re
 
 app = FastAPI()
-client = Client()
 
 app.add_middleware(
     CORSMiddleware,
@@ -32,16 +31,21 @@ async def chat(request: Request):
     if not user_messages:
         raise HTTPException(status_code=400, detail="الرجاء إرسال الرسائل في JSON كـ 'messages'.")
 
-    messages = [SYSTEM_PROMPT] + user_messages
+    food_name = user_messages[0]["content"]
+    if not food_name:
+        raise HTTPException(status_code=400, detail="الرجاء إرسال اسم أكلة.")
+
+    # طلب إلى openai-reasoning API
+    api_url = f"https://text.pollinations.ai/{food_name}"
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages,
-            stream=False,
-            web_search=False
-        )
-        full_content = response.choices[0].message.content.strip()
+        # إرسال طلب GET إلى API
+        response = requests.get(api_url)
+
+        if response.status_code != 200:
+            raise Exception("فشل في الاتصال بالخدمة")
+
+        full_content = response.text.strip()
 
         # نحاول استخراج رقم فقط
         match = re.fullmatch(r"\d+", full_content)
@@ -51,5 +55,4 @@ async def chat(request: Request):
             return PlainTextResponse(content="خطأ: الرجاء كتابة اسم أكلة")
 
     except Exception as e:
-        print(f"Error: {e}")  # طباعه الخطأ للمساعدة في التشخيص
         return PlainTextResponse(content="خطأ: الرجاء كتابة اسم أكلة")
