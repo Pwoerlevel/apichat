@@ -1,37 +1,45 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-import httpx  # لاستخدام HTTP للاتصال بـ API الخارجي
+from g4f.client import Client
 
+# إعداد FastAPI
 app = FastAPI()
 
+# إنشاء عميل g4f
+client = Client()
+
+# إضافة Middleware للسماح بالـ CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # السماح لجميع الأصول
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # السماح لجميع الأساليب مثل GET, POST
+    allow_headers=["*"],  # السماح بكل الرؤوس
 )
 
+# المسار الذي يستقبل الطلبات
 @app.post("/chat")
 async def chat(request: Request):
+    # قراءة البيانات المرسلة
     data = await request.json()
-    prompt = data.get("prompt", "")
+    messages = data.get("messages", [])
 
-    if not prompt:
-        raise HTTPException(status_code=400, detail="الرجاء إرسال النص في JSON كـ 'prompt'.")
+    # التحقق من وجود الرسائل
+    if not messages:
+        raise HTTPException(status_code=400, detail="الرجاء إرسال الرسائل في JSON كـ 'messages'.")
 
     try:
-        # إرسال النص إلى الـ API الخارجي
-        url = f"https://text.pollinations.ai/{encodeURIComponent('كم سعرة في رقم اجب برقم واحد فقط فقط الرقم مباشرة بدون اي كلام' + prompt)}"
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url)
-        
-        if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail="حدث خطأ أثناء الاتصال بالـ API الخارجي.")
+        # إرسال الرسائل إلى نموذج gpt-4o-mini عبر g4f
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            stream=False,  # تعطيل التدفق المستمر
+            web_search=False
+        )
         
         # إرجاع الرد للمستخدم
-        return {"response": response.text}
+        return {"response": response.choices[0].text}
 
     except Exception as e:
+        # في حالة حدوث خطأ، إرجاع رسالة خطأ للمستخدم
         raise HTTPException(status_code=500, detail=f"حدث خطأ: {str(e)}")
