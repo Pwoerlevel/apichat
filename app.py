@@ -1,12 +1,11 @@
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
-import re  # لاستخراج الرقم من النص
 
 app = FastAPI()
 
-# إضافة CORSMiddleware للسماح بالطلبات من أي مصدر
+# إعدادات CORS للسماح بالطلبات من جميع المصادر
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,41 +14,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.post("/calories")
-async def get_calories(request: Request):
-    # قراءة البيانات الواردة من الطلب
+@app.post("/chat")
+async def chat(request: Request):
+    # الحصول على البيانات من الطلب
     data = await request.json()
     messages = data.get("messages", [])
 
+    # التحقق من وجود الرسائل
     if not messages:
         raise HTTPException(status_code=400, detail="الرجاء إرسال الرسائل في JSON كـ 'messages'.")
 
     # دمج الرسائل في نص واحد
-    user_text = " ".join([message["content"] for message in messages])
+    user_text = " ".join(messages)
+    
+    # تكوين الرابط الخارجي
+    external_url = f"https://text.pollinations.ai/{user_text}"
 
-    # إرسال النص إلى الرابط الخارجي (API)
-    external_url = f"https://text.pollinations.ai/رقم فقط الرقم سعرة حرارية فقط رقم فقط رقم بدون اي كلام لي {user_text}"
-
-    try:
-        async with httpx.AsyncClient() as client:
-            # إرسال طلب إلى API الخارجي
+    # إرسال طلب إلى API الخارجية باستخدام httpx
+    async with httpx.AsyncClient() as client:
+        try:
+            # إرسال طلب GET إلى الرابط الخارجي
             response = await client.get(external_url)
-            response.raise_for_status()  # تحقق من حالة الاستجابة
+            # التحقق من حالة الاستجابة
+            response.raise_for_status()
 
-            # استخراج الرقم من النص (السعرات الحرارية)
-            calories = extract_calories(response.text)
-            if calories is None:
-                raise HTTPException(status_code=500, detail="لم يتم العثور على السعرات الحرارية في الرد.")
+            def generate_response():
+                try:
+                    # إرجاع النص من الاستجابة للمستخدم بشكل مستمر (streaming)
+                    yield response.text
+                except Exception as e:
+                    yield f"\n[خطأ]: {str(e)}"
 
-            return JSONResponse(content={"calories": calories})
+            # إرجاع الاستجابة بشكل مستمر (streaming)
+            return StreamingResponse(generate_response(), media_type="text/plain")
 
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=500, detail=f"خطأ في الاتصال بـ {external_url}: {str(e)}")
-
-# دالة لاستخراج الرقم من النص
-def extract_calories(text: str) -> int:
-    # استخدام تعبير منتظم لاستخراج الرقم (السعرات الحرارية)
-    match = re.search(r"\d+", text)
-    if match:
-        return int(match.group())  # إرجاع الرقم فقط
-    return None
+        except httpx.RequestError as e:
+            # معالجة الأخطاء في الاتصال بالخدمة الخارجية
+            raise HTTPException(status_code=500, detail=f"خطأ في الاتصال بـ {external_url}: {str(e)}")
