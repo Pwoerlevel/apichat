@@ -49,5 +49,7 @@ async def chat(request: Request):
             return PlainTextResponse(content=match.group())
         else:
             return PlainTextResponse(content="خطأ: الرجاء كتابة اسم أكلة")
+
     except Exception as e:
+        print(f"Error: {e}")  # طباعه الخطأ للمساعدة في التشخيص
         return PlainTextResponse(content="خطأ: الرجاء كتابة اسم أكلة")
