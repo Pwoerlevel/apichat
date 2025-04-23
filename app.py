@@ -1,45 +1,37 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from g4f.client import Client
+import httpx  # نستخدم httpx لعمل GET خارجي
 
-# إعداد FastAPI
 app = FastAPI()
 
-# إنشاء عميل g4f
-client = Client()
-
-# إضافة Middleware للسماح بالـ CORS
+# CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # السماح لجميع الأصول
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # السماح لجميع الأساليب مثل GET, POST
-    allow_headers=["*"],  # السماح بكل الرؤوس
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# المسار الذي يستقبل الطلبات
 @app.post("/chat")
 async def chat(request: Request):
-    # قراءة البيانات المرسلة
     data = await request.json()
     messages = data.get("messages", [])
 
-    # التحقق من وجود الرسائل
     if not messages:
         raise HTTPException(status_code=400, detail="الرجاء إرسال الرسائل في JSON كـ 'messages'.")
 
+    # نأخذ آخر رسالة من المستخدم
+    prompt = messages[-1]["content"]
+
     try:
-        # إرسال الرسائل إلى نموذج gpt-4o-mini عبر g4f
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages,
-            stream=False,  # تعطيل التدفق المستمر
-            web_search=False
-        )
-        
-        # إرجاع الرد للمستخدم
-        return {"response": response.choices[0].text}
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"https://text.pollinations.ai/{prompt}")
+
+        if response.status_code != 200:
+            raise HTTPException(status_code=500, detail="فشل في جلب الرد من pollinations.")
+
+        return {"response": response.text}
 
     except Exception as e:
-        # في حالة حدوث خطأ، إرجاع رسالة خطأ للمستخدم
         raise HTTPException(status_code=500, detail=f"حدث خطأ: {str(e)}")
