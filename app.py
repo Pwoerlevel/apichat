@@ -1,72 +1,55 @@
-<!DOCTYPE html>
-<html lang="ar">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>واجهة الدردشة</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            margin-top: 50px;
-        }
-        #response {
-            margin-top: 20px;
-            padding: 10px;
-            border: 1px solid #ccc;
-            width: 80%;
-            margin: 0 auto;
-            min-height: 100px;
-        }
-        #chatBox {
-            margin-top: 20px;
-        }
-    </style>
-</head>
-<body>
-    <h1>مرحبا بك في خدمة الدردشة</h1>
-    
-    <div>
-        <textarea id="userInput" placeholder="اكتب رسالتك هنا..." rows="4" cols="50"></textarea>
-    </div>
-    <div id="chatBox">
-        <button onclick="sendMessage()">إرسال</button>
-    </div>
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+import httpx
+import re  # لاستخراج الرقم من النص
 
-    <div id="response"></div>
+app = FastAPI()
 
-    <script>
-        async function sendMessage() {
-            const userInput = document.getElementById('userInput').value;
+# إضافة CORSMiddleware للسماح بالطلبات من أي مصدر
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-            if (!userInput) {
-                alert("الرجاء كتابة نص.");
-                return;
-            }
+@app.post("/calories")
+async def get_calories(request: Request):
+    # قراءة البيانات الواردة من الطلب
+    data = await request.json()
+    messages = data.get("messages", [])
 
-            // إرسال الطلب إلى الخادم
-            const responseElement = document.getElementById('response');
-            responseElement.innerHTML = "جاري معالجة الرسالة...";
+    if not messages:
+        raise HTTPException(status_code=400, detail="الرجاء إرسال الرسائل في JSON كـ 'messages'.")
 
-            try {
-                const response = await fetch("https://apichat-bifn8t037-pwoerlevels-projects.vercel.app/chat", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({ messages: [userInput] })
-                });
+    # دمج الرسائل في نص واحد
+    user_text = " ".join([message["content"] for message in messages])
 
-                if (response.ok) {
-                    const text = await response.text();
-                    responseElement.innerHTML = text;
-                } else {
-                    responseElement.innerHTML = "حدث خطأ أثناء معالجة الرسالة.";
-                }
-            } catch (error) {
-                responseElement.innerHTML = `خطأ في الاتصال بالخادم: ${error.message}`;
-            }
-        }
-    </script>
-</body>
-</html>
+    # إرسال النص إلى الرابط الخارجي (API)
+    external_url = f"https://text.pollinations.ai/{user_text}"
+
+    try:
+        async with httpx.AsyncClient() as client:
+            # إرسال طلب إلى API الخارجي
+            response = await client.get(external_url)
+            response.raise_for_status()  # تحقق من حالة الاستجابة
+
+            # استخراج الرقم من النص (السعرات الحرارية)
+            calories = extract_calories(response.text)
+            if calories is None:
+                raise HTTPException(status_code=500, detail="لم يتم العثور على السعرات الحرارية في الرد.")
+
+            return JSONResponse(content={"calories": calories})
+
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=500, detail=f"خطأ في الاتصال بـ {external_url}: {str(e)}")
+
+# دالة لاستخراج الرقم من النص
+def extract_calories(text: str) -> int:
+    # استخدام تعبير منتظم لاستخراج الرقم (السعرات الحرارية)
+    match = re.search(r"\d+", text)
+    if match:
+        return int(match.group())  # إرجاع الرقم فقط
+    return None
