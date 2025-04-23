@@ -1,9 +1,8 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from g4f.client import Client
+import httpx  # لاستخدام HTTP للاتصال بـ API الخارجي
 
 app = FastAPI()
-client = Client()
 
 app.add_middleware(
     CORSMiddleware,
@@ -16,18 +15,23 @@ app.add_middleware(
 @app.post("/chat")
 async def chat(request: Request):
     data = await request.json()
-    messages = data.get("messages", [])
+    prompt = data.get("prompt", "")
 
-    if not messages:
-        raise HTTPException(status_code=400, detail="الرجاء إرسال الرسائل في JSON كـ 'messages'.")
+    if not prompt:
+        raise HTTPException(status_code=400, detail="الرجاء إرسال النص في JSON كـ 'prompt'.")
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages,
-            stream=False,  # نوقف التدفق المستمر
-            web_search=False
-        )
-        return {"response": response.choices[0].text}  # رد كامل بدلاً من تدفق البيانات
+        # إرسال النص إلى الـ API الخارجي
+        url = f"https://text.pollinations.ai/{encodeURIComponent('كم سعرة في رقم اجب برقم واحد فقط فقط الرقم مباشرة بدون اي كلام' + prompt)}"
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url)
+        
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail="حدث خطأ أثناء الاتصال بالـ API الخارجي.")
+        
+        # إرجاع الرد للمستخدم
+        return {"response": response.text}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"حدث خطأ: {str(e)}")
