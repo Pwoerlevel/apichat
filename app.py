@@ -7,10 +7,10 @@ app = FastAPI()
 # السماح بطلبات CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # السماح بكل النطاقات
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # السماح بكل الطرق
+    allow_headers=["*"],  # السماح بكل الهيدرات
 )
 
 @app.post("/calories")
@@ -26,6 +26,18 @@ async def get_calories(request: Request):
 
     url = f"https://text.pollinations.ai/{prompt}"
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url)
-        return {"calories": response.text.strip()}
+    try:
+        # إرسال طلب GET للموقع
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url)
+            
+            # في حالة كانت الردود غير ناجحة
+            response.raise_for_status()
+
+            # إرجاع السعرات
+            return {"calories": response.text.strip()}
+    
+    except httpx.RequestError as e:
+        return {"error": f"حدث خطأ في الاتصال: {e}"}
+    except httpx.HTTPStatusError as e:
+        return {"error": f"حدث خطأ في الاستجابة: {e}"}
