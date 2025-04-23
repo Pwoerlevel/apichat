@@ -1,11 +1,10 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 import httpx
 
 app = FastAPI()
 
-# CORS
+# السماح بطلبات CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,27 +13,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class FoodRequest(BaseModel):
-    food: str
-
 @app.post("/calories")
-async def get_calories(data: FoodRequest):
-    prompt = f"كم عدد السعرات الحرارية في {data.food}؟ أجب فقط بالرقم بدون شرح."
+async def get_calories(request: Request):
+    data = await request.json()
+    food = data.get("food", "").strip()
+
+    if not food:
+        return {"error": "يرجى كتابة اسم الأكلة"}
+
+    # نص البرومبت
+    prompt = f"كم عدد السعرات الحرارية في {food}؟ أجب فقط برقم السعرات بدون شرح"
+
+    url = f"https://text.pollinations.ai/{prompt}"
 
     async with httpx.AsyncClient() as client:
-        response = await client.post(
-            "https://api.openrouter.ai/v1/chat/completions",  # مثال على endpoint
-            headers={
-                "Authorization": "Bearer sk-xxx",  # مفتاح API الخاص بك
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": "deepseek-reasoning-large",
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ]
-            }
-        )
-        result = response.json()
-        answer = result['choices'][0]['message']['content']
-        return {"calories": answer.strip()}
+        response = await client.get(url)
+        return {"calories": response.text.strip()}
