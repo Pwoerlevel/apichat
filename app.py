@@ -1,11 +1,11 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from g4f.client import Client
+import httpx
 
 app = FastAPI()
-client = Client()
 
+# السماح بطلبات CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,27 +14,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.post("/chat")
-async def chat(request: Request):
+@app.post("/calories")
+async def get_calories(request: Request):
     data = await request.json()
-    messages = data.get("messages", [])
+    food = data.get("food", "").strip()
 
-    if not messages:
-        raise HTTPException(status_code=400, detail="الرجاء إرسال الرسائل في JSON كـ 'messages'.")
+    if not food:
+        raise HTTPException(status_code=400, detail="الرجاء إرسال اسم الأكلة")
 
-    def generate_response():
+    # بناء نص البرومبت
+    prompt = f"كم عدد السعرات الحرارية في {food}؟ أجب فقط برقم السعرات بدون شرح"
+    
+    # استخدام API Pollinations
+    url = f"https://text.pollinations.ai/{prompt}"
+
+    async def generate_response():
         try:
-            stream = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=messages,
-                stream=True,
-                web_search=False
-            )
-            for chunk in stream:
-                content = chunk.choices[0].delta.content
-                if content:
-                    yield content  # هذه هي البيانات التي سيتم إرسالها بشكل مستمر (stream)
-        except Exception as e:
-            yield f"\n[خطأ]: {str(e)}"
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url)
+                response.raise_for_status()  # التأكد من أن الاستجابة كانت صحيحة
+                return response.text.strip()
+        except httpx.RequestError as e:
+            raise HTTPException(status_code=500, detail=f"حدث خطأ في الاتصال: {e}")
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(status_code=500, detail=f"حدث خطأ في الاستجابة: {e}")
 
-    return StreamingResponse(generate_response(), media_type="text/plain")
+    # نحصل على الرد من API
+    response_text = await generate_response()
+    return {"calories": response_text}
