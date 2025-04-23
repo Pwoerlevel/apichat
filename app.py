@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 
@@ -26,23 +26,23 @@ async def chat(request: Request):
     if not messages:
         raise HTTPException(status_code=400, detail="الرجاء إرسال الرسائل في JSON كـ 'messages'.")
 
-    # استدعاء API Pollinations باستخدام httpx
-    async def generate_response():
-        try:
-            # دمج الرسائل في نص واحد
-            prompt = ' '.join([message['content'] for message in messages])
-            # إرسال طلب GET إلى Pollinations API
-            async with httpx.AsyncClient() as client:
-                response = await client.get(f"https://text.pollinations.ai/{prompt}")
-            
-            # التحقق من الاستجابة
-            if response.status_code == 200:
-                content = response.text
-                yield content  # إرسال المحتوى بشكل مستمر
-            else:
-                yield f"\n[خطأ]: لم تتمكن من الحصول على استجابة من API"
-        except Exception as e:
-            yield f"\n[خطأ]: {str(e)}"
+    # دمج الرسائل في نص واحد
+    prompt = ' '.join([message['content'] for message in messages])
 
-    # إرجاع الاستجابة بشكل Streaming
-    return StreamingResponse(generate_response(), media_type="text/plain")
+    try:
+        # إرسال طلب GET إلى Pollinations API
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"https://text.pollinations.ai/{prompt}")
+        
+        # التحقق من الاستجابة
+        if response.status_code == 200:
+            content = response.text
+            # إرجاع الرد كاملاً
+            return JSONResponse(content={"response": content})
+        else:
+            # في حالة عدم النجاح، إرجاع خطأ
+            return JSONResponse(content={"error": "لم تتمكن من الحصول على استجابة من API"}, status_code=500)
+
+    except Exception as e:
+        # في حالة حدوث استثناء، إرجاع رسالة خطأ
+        return JSONResponse(content={"error": f"حدث خطأ: {str(e)}"}, status_code=500)
