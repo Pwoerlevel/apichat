@@ -3,6 +3,7 @@ from fastapi.responses import PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 import requests
 import re
+from urllib.parse import quote_plus
 
 app = FastAPI()
 
@@ -13,15 +14,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-SYSTEM_PROMPT = {
-    "role": "system",
-    "content": (
-        "أنت خبير تغذية محترف. مهمتك فقط هي إعطاء عدد السعرات الحرارية لأكلة واحدة فقط، بصيغة رقم فقط (مثل: 350). "
-        "لا تكتب أي كلمة، لا شرح، لا وحدات. فقط الرقم.\n"
-        "إذا لم تكن الرسالة اسم أكلة معروفة، فلا ترد بشيء أبداً."
-    )
-}
 
 @app.post("/chat")
 async def chat(request: Request):
@@ -35,8 +27,14 @@ async def chat(request: Request):
     if not food_name:
         raise HTTPException(status_code=400, detail="الرجاء إرسال اسم أكلة.")
 
-    # طلب إلى openai-reasoning API
-    api_url = f"https://text.pollinations.ai/{food_name}"
+    # إعداد النص الذي سيتم إرساله إلى API
+    prompt_text = f"السعرات الحرارية لي {food_name} فقط ارجع رقم فقط"
+
+    # نقوم بترميز النص ليكون صالحًا في URL
+    encoded_prompt = quote_plus(prompt_text)
+
+    # إرسال الطلب إلى API
+    api_url = f"https://text.pollinations.ai/{encoded_prompt}"
 
     try:
         # إرسال طلب GET إلى API
@@ -45,6 +43,7 @@ async def chat(request: Request):
         if response.status_code != 200:
             raise Exception("فشل في الاتصال بالخدمة")
 
+        # استخراج النص الكامل من الاستجابة
         full_content = response.text.strip()
 
         # نحاول استخراج رقم فقط
@@ -52,7 +51,7 @@ async def chat(request: Request):
         if match:
             return PlainTextResponse(content=match.group())
         else:
-            return PlainTextResponse(content="خطأ: الرجاء كتابة اسم أكلة")
+            return PlainTextResponse(content="خطأ: الرجاء كتابة اسم أكلة معروفة")
 
     except Exception as e:
         return PlainTextResponse(content="خطأ: الرجاء كتابة اسم أكلة")
