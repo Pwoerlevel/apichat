@@ -1,10 +1,11 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-import httpx
+from g4f.client import Client
 
 app = FastAPI()
+client = Client()
 
-# CORS settings
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -13,23 +14,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.post("/api/calories")  # ملاحظة مهمة: استخدم المسار المطابق للمسار على Vercel
-async def get_calories(request: Request):
+@app.post("/chat")
+async def chat(request: Request):
     data = await request.json()
-    food = data.get("food", "").strip()
+    messages = data.get("messages", [])
 
-    if not food:
-        return {"error": "يرجى كتابة اسم الأكلة"}
+    if not messages:
+        raise HTTPException(status_code=400, detail="الرجاء إرسال الرسائل في JSON كـ 'messages'.")
 
-    prompt = f"كم عدد السعرات الحرارية في {food}؟ أجب فقط برقم السعرات بدون شرح"
-    url = f"https://text.pollinations.ai/{prompt}"
+    def generate_response():
+        try:
+            stream = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                stream=True,
+                web_search=False
+            )
+            for chunk in stream:
+                content = chunk.choices[0].delta.content
+                if content:
+                    yield content  # هذه هي البيانات التي سيتم إرسالها بشكل مستمر (stream)
+        except Exception as e:
+            yield f"\n[خطأ]: {str(e)}"
 
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url)
-            response.raise_for_status()
-            return {"calories": response.text.strip()}
-    except httpx.RequestError as e:
-        return {"error": f"حدث خطأ في الاتصال: {e}"}
-    except httpx.HTTPStatusError as e:
-        return {"error": f"حدث خطأ في الاستجابة: {e}"}
+    return StreamingResponse(generate_response(), media_type="text/plain")
