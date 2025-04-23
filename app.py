@@ -31,7 +31,7 @@ async def chat(request: Request):
     
     # التحقق من وجود النص المطلوب
     if required_text not in user_text:
-        return PlainTextResponse("يرجى إضافة الطلب بالصيغة الصحيحة 404")
+        return PlainTextResponse("يرجى إضافة الطلب بالصيغة الصحيحة 404666404666664040")
     
     # تكوين الرابط الخارجي
     external_url = f"https://text.pollinations.ai/{user_text}"
